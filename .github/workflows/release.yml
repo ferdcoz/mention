@@ -1,4 +1,6 @@
 name: Build release artifact
+permissions:
+  contents: read
 
 on:
   push:
@@ -21,6 +23,8 @@ jobs:
             --exclude=.github \
             --exclude=dist \
             --exclude=.gitignore \
+            --exclude='hardening/test*' \
+            --exclude='screenshot-*.png' \
             . \
           | tar -xf - -C dist/paul999/mention
 

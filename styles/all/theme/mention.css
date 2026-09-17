@@ -1,3 +1,28 @@
 .tribute-container {
     min-width: 85px;
 }
+/* Theme-aware tag; Moderno exposes --main-color, Prosilver uses the fallback. */
+.content .mention, .postbody .mention, .mention {
+    display: inline-block;
+    padding: 0.08em 0.65em;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    background-color: var(--mention-mention-bg, var(--main-color, #536482));
+    color: var(--mention-mention-text, #fff);
+    font-weight: 500;
+    line-height: 1.45;
+    text-decoration: none;
+    vertical-align: baseline;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    box-sizing: border-box;
+}
+a.mention:hover, a.mention:focus {
+    color: var(--mention-mention-text, #fff);
+    text-decoration: none;
+    filter: brightness(1.12);
+}
+a.mention:focus-visible {
+    outline: 2px solid var(--command-color, #105289);
+    outline-offset: 2px;
+}

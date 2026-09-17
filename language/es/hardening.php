@@ -2,10 +2,6 @@
 // phpBB Mentions maintained translation; GPL-2.0-only.
 if (!defined('IN_PHPBB')) { exit; }
 $lang = array_merge(isset($lang) ? $lang : [], [
-	'MENTION_MENTION_NOTIFICATION' => 'Te mencionó %1$s<br>en “%2$s”',
-	'NOTIFICATION_TYPE_MENTION' => 'Alguien me mencionó',
-	'MENTION_GROUP_NAME' => '(Grupo: hasta {CNT} miembros activos)',
-	'MENTION_NO_MATCH_FOUND' => 'Se necesitan al menos <strong>%1$s</strong> caracteres.',
 	'MENTION_LIMIT_EXCEEDED' => 'El mensaje supera el límite de seguridad de %s candidatos únicos o etiquetas de mención. Reduce las menciones.',
 	'MENTION_MASS_DENIED' => 'Para esta cantidad de destinatarios se necesita el permiso para mencionar grupos grandes.',
 	'MENTION_CONFIRM_REQUIRED' => 'Confirma que quieres notificar hasta %s destinatarios y vuelve a enviar. Si cambias el mensaje deberás confirmar otra vez.',

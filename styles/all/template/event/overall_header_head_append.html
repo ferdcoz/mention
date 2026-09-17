@@ -4,7 +4,8 @@
 {% INCLUDECSS '@paul999_mention/mention.css' %}
 <style type="text/css">
     .mention {
-        color: #{{ MENTION_COLOR|e('css') }};
+        {% if MENTION_BACKGROUND %}--mention-mention-bg: #{{ MENTION_BACKGROUND }};{% endif %}
+        --mention-mention-text: #{{ MENTION_TEXT }};
         {% if MENTION_STYLE == 'italic' or MENTION_STYLE == 'italic_bold' %}font-style: italic;{% endif %}
         {% if MENTION_STYLE == 'bold' or MENTION_STYLE == 'italic_bold' %}font-weight: bold;{% endif %}
     }

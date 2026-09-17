@@ -1,91 +1,61 @@
-# phpBB Mentions Fork
+# phpBB Mentions
 
-This extension is a fork of `paul999/mention` and adds a simple mention system to phpBB using `@Username`.
+A community-maintained phpBB extension for user and group mentions. Maintained by
+**Fernando Coz** ([ferdcoz](https://github.com/ferdcoz)).
 
-## Fork Notice
+## Credits and license
 
-This fork still uses the original extension namespace `paul999/mention`. Therefore, the installation path remains `phpBB/ext/paul999/mention`.
+This fork builds on [MoeMorox/mention](https://github.com/MoeMorox/mention),
+version 3.0.1, which builds on the original
+[paul999/mention](https://github.com/paul999/mention).
+Original authors and contributors retain credit for their work. The extension
+remains licensed under **GPL-2.0-only**; see [license.txt](license.txt).
+This is an independent community fork, not an official phpBB extension.
 
-## Fork Changes
+## Features
 
-- Dedicated ACP page for mention settings in the extension settings.
-- Configurable mention font style.
-- Optional links from mentions to user profiles.
-- Updated defaults: autocomplete starts after 2 characters and returns up to 25 results.
-- Autocomplete no longer triggers inside email addresses.
-- Improved autocomplete feedback when the input is shorter than the configured minimum length.
-- Optional per-language email template override via `mention_mail-overwrite.txt`.
-- Revised German and English texts for permissions and email notifications.
+- `@` autocomplete for users, with current-topic participants first.
+- Debounced search that refreshes after deletion, cut and paste.
+- Rounded mention tags with configurable background, text and font style.
+- Live ACP colour swatches and tag preview.
+- Separate user, group and large-group permissions.
+- Recipient read-permission checks; inactive accounts and pending memberships excluded.
+- Hard limits, server-side confirmation and per-account search rate limiting.
+- Board notifications enabled by default; email is opt-in per user.
+- ACP can allow user-selected email or block mention email globally.
+- English and Spanish (`es` and `es_x_tu`) translations for the added functionality.
+- Existing inherited translations remain available; newer options may fall back to English.
 
-## Inherited Features
+## Requirements
 
-- User mentions via `@Username` autocomplete.
-- Group mentions with separate permissions for groups and large groups.
-- Configurable mention color.
-- Configurable minimum length for autocomplete search.
-- Configurable maximum number of autocomplete results.
-- Mention BBCodes are converted back to readable `@Name` text when quoting.
-- Mention BBCode is only enabled where it is needed.
-- Notifications are also processed when posts are approved later.
-- Mention notifications are marked as read when topics or forums are marked as read.
+- phpBB 3.3.17 or newer in the 3.3 series.
+- PHP 8.1 or newer. Automated tests target PHP 8.1 and 8.2.
+- Prosilver or a compatible style exposing the phpBB template events.
 
-## Installation
+## Installation and upgrade
 
-1. Copy the extension to `phpBB/ext/paul999/mention`.
-2. In the ACP, go to `Customise` > `Extensions` and enable the `phpBB mentions` extension.
-3. Review permissions and assign `Can use the mention system`, `Can mention groups`, and `Can mention large groups` where needed.
-4. Configure the extension settings in the ACP.
+1. Back up the database and extension files.
+2. Download a release package and extract into `ext/paul999/mention`.
+3. Enable the extension under ACP → Customise → Manage extensions.
+4. Assign mention permissions under ACP → Permissions → Group permissions.
+5. Configure appearance and notification channels under ACP → Extensions → Mentions.
 
-This extension requires phpBB `>= 3.3.0RC1` and PHP `~7.1` or `~8.0`.
+The original namespace and installation directory are deliberately retained for
+upgrade compatibility. Do not install this alongside another `paul999/mention`
+version. For an upgrade, disable the existing extension, replace its files,
+enable it to apply migrations, and purge the cache. Do not delete extension data.
 
-## Translations
+Users choose notification methods under UCP → Board preferences → Edit notification
+options. Allowing email in ACP does not subscribe users automatically. Previewing
+and mentioning yourself do not generate mention notifications. Pending posts wait
+for approval; editing does not immediately send new mention notifications.
 
-Currently, only `en`, `de`, `de_x_sie`, and `fr` are maintained.
+The editor remains a plain textarea: `[smention]` BBCode is visible while editing
+and renders as a tag in previews and published posts.
 
-Other existing language directories were inherited from the original project and are not actively maintained in this fork. If you use another language, review and update the texts before using them in production.
+## Safety and testing
 
-## Overriding the Email Template
-
-Mention emails use the template `@paul999_mention/mention_mail` by default.
-
-To override the email template without modifying the default file, create this file for the relevant language:
-
-```text
-language/<language>/email/mention_mail-overwrite.txt
-```
-
-For German, for example:
-
-```text
-language/de/email/mention_mail-overwrite.txt
-language/de_x_sie/email/mention_mail-overwrite.txt
-```
-
-If no override file exists for the recipient's language, phpBB falls back to the default `language/<language>/email/mention_mail.txt`. Clear the phpBB cache after changing language or template files.
-
-Available template variables:
-
-- `{AUTHOR_NAME}`: Name of the user who mentioned someone.
-- `{TOPIC_TITLE}`: Topic title.
-- `{U_LINK_TO_TOPIC}`: Direct link to the post.
-- `{SITENAME}` and `{EMAIL_SIG}`: Standard phpBB variables.
-
-## Tests
-
-To run the tests, phpBB must be installed from its Git repository. Then run the following from the phpBB root directory:
-
-Windows:
-
-```bat
-phpBB\vendor\bin\phpunit.bat -c phpBB\ext\paul999\mention\phpunit.xml.dist
-```
-
-Other systems:
-
-```sh
-phpBB/vendor/bin/phpunit -c phpBB/ext/paul999/mention/phpunit.xml.dist
-```
-
-## License
-
-[GPLv2](license.txt)
+See [HARDENING.md](HARDENING.md) for limits, isolated test instructions, behaviour
+and validation boundaries. Automated tests use synthetic users and an isolated
+database, without sending mail. Review group permissions and test on a staging
+forum before updating a live installation.

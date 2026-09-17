@@ -1,1 +1,5 @@
 {% INCLUDE '@paul999_mention/mention.html' %}
+{% if MENTION_CONFIRM_TOKEN %}
+<div class="panel"><label><input type="checkbox" name="mention_confirm" value="1" /> {{ lang('MENTION_CONFIRM_REQUIRED', MENTION_CONFIRM_COUNT) }}</label>
+<input type="hidden" name="mention_confirm_token" value="{{ MENTION_CONFIRM_TOKEN }}" /></div>
+{% endif %}

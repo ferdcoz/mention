@@ -22,15 +22,25 @@
 			<dt><label for="simple_mention_maxresults">{{ lang('MENTION_MAX_RESULTS') ~ lang('COLON') }}</label><br><span>{{ lang('MENTION_MAX_RESULTS_EXPLAIN') }}</span></dt>
 			<dd><input type="number" id="simple_mention_maxresults" name="simple_mention_maxresults" min="1" max="9999" value="{{ SIMPLE_MENTION_MAXRESULTS }}"></dd>
 		</dl>
-		<dl>
-			<dt><label for="simple_mention_color">{{ lang('MENTION_COLOR') ~ lang('COLON') }}</label><br><span>{{ lang('MENTION_COLOR_EXPLAIN') }}</span></dt>
-			<dd>
-				<input name="simple_mention_color" type="text" id="simple_mention_color" value="{{ SIMPLE_MENTION_COLOR }}" size="6" maxlength="6">
-				{% if SIMPLE_MENTION_COLOR %}&nbsp;<span style="background-color: #{{ SIMPLE_MENTION_COLOR }}">&nbsp; &nbsp;</span>{% endif %}&nbsp;&nbsp;<span>
-				[ <a href="#" id="color_palette_toggle">{{ lang('COLOUR_SWATCH') }}</a> ]</span>
-				<div id="color_palette_placeholder" style="display: none;" data-color-palette="h" data-height="12" data-width="15" data-target="#simple_mention_color"></div>
-			</dd>
-		</dl>
+        <dl>
+            <dt><label for="simple_mention_background">{{ lang('MENTION_BACKGROUND') }}</label><br><span>{{ lang('MENTION_BACKGROUND_EXPLAIN') }}</span></dt>
+            <dd><span id="mention_background_swatch" class="mention-colour-swatch" aria-hidden="true"></span> <input type="text" id="simple_mention_background" name="simple_mention_background" value="{{ SIMPLE_MENTION_BACKGROUND }}" maxlength="7" size="8"></dd>
+        </dl>
+        <dl>
+            <dt><label for="simple_mention_text">{{ lang('MENTION_TEXT') }}</label><br><span>{{ lang('MENTION_COLOR_EXPLAIN') }}</span></dt>
+            <dd><span id="mention_text_swatch" class="mention-colour-swatch" aria-hidden="true"></span> <input type="text" id="simple_mention_text" name="simple_mention_text" value="{{ SIMPLE_MENTION_TEXT }}" maxlength="7" size="8"></dd>
+        </dl>
+        <dl>
+            <dt>{{ lang('MENTION_PREVIEW') }}<br><span>{{ lang('MENTION_PREVIEW_EXPLAIN') }}</span></dt>
+            <dd><div class="mention-preview-line"><span id="mention_tag_preview">@Usuario</span> {{ lang('MENTION_PREVIEW_SAMPLE') }}</div><span id="mention_preview_invalid" hidden>{{ lang('MENTION_PREVIEW_INVALID') }}</span></dd>
+        </dl>
+        <dl>
+            <dt><label for="simple_mention_email_enabled">{{ lang('MENTION_EMAIL') }}</label><br><span>{{ lang('MENTION_EMAIL_EXPLAIN') }}</span></dt>
+            <dd><select id="simple_mention_email_enabled" name="simple_mention_email_enabled">
+                <option value="0" {% if not SIMPLE_MENTION_EMAIL_ENABLED %}selected{% endif %}>{{ lang('MENTION_BOARD_ONLY') }}</option>
+                <option value="1" {% if SIMPLE_MENTION_EMAIL_ENABLED %}selected{% endif %}>{{ lang('MENTION_ALLOW_EMAIL') }}</option>
+            </select></dd>
+        </dl>
 		<dl>
 			<dt><label for="simple_mention_style">{{ lang('MENTION_STYLE') ~ lang('COLON') }}</label><br><span>{{ lang('MENTION_STYLE_EXPLAIN') }}</span></dt>
 			<dd>
@@ -61,4 +71,11 @@
 	</fieldset>
 </form>
 
+<style>
+.mention-colour-swatch {display:inline-block; width:24px; height:24px; border:1px solid #999; border-radius:4px; vertical-align:middle; margin-right:5px;}
+.mention-preview-line {padding:12px; background:#f3f5f7; color:#333; border:1px solid #ddd; border-radius:4px;}
+#mention_tag_preview {display:inline-block; padding:.08em .65em; border:1px solid transparent; border-radius:999px; line-height:1.45; vertical-align:baseline;}
+#mention_preview_invalid {color:#b00020;}
+</style>
+{% INCLUDEJS '@paul999_mention/mention-preview.js' %}
 {% include 'overall_footer.html' %}

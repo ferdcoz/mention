@@ -1,0 +1,45 @@
+name: phpBB Mentions mention controls
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  synthetic:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        php: ['8.1', '8.2']
+        database: ['mysql:5.7', 'mariadb:10.11.18']
+    services:
+      database:
+        image: ${{ matrix.database }}
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
+          MYSQL_DATABASE: mention_test
+          MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: 'yes'
+          MARIADB_DATABASE: mention_test
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 --silent"
+          --health-interval=5s --health-timeout=5s --health-retries=30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: mysqli, mbstring, dom, intl
+          tools: composer:v2
+      - name: Exact phpBB source
+        run: |
+          git clone https://github.com/phpbb/phpbb.git "$RUNNER_TEMP/phpbb"
+          git -C "$RUNNER_TEMP/phpbb" checkout 3508484fdc18cd97eeab229da830055c79fcc59e
+          composer install --working-dir="$RUNNER_TEMP/phpbb/phpBB" --no-dev --prefer-dist --no-interaction
+          echo "MENTION_CORE_PATH=$RUNNER_TEMP/phpbb/phpBB/" >> "$GITHUB_ENV"
+          echo "MENTION_VENDOR_AUTOLOAD=$RUNNER_TEMP/phpbb/phpBB/vendor/autoload.php" >> "$GITHUB_ENV"
+      - name: Lint and metadata
+        run: |
+          find . -name '*.php' -not -path './vendor/*' -print0 | xargs -0 -n1 php -l
+          composer validate --no-check-publish --no-check-lock
+      - name: Synthetic integration and JS tests
+        run: |
+          php -d error_reporting=24575 hardening/tests-preferences.php
+          node hardening/tests-js.cjs

@@ -22,6 +22,7 @@ use phpbb\db\driver\driver_interface;
 use phpbb\notification\manager;
 use phpbb\template\template;
 use phpbb\user;
+use paul999\mention\hardening\policy;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 
 /**
@@ -71,6 +72,13 @@ class main_listener implements EventSubscriberInterface
 	 * @var string
 	 */
 	private $php_ext;
+    private $request;
+    private $log;
+    private $consent_table;
+    private $mention_error;
+    private $author_id;
+    private $message_hash;
+    private $needs_confirmation = false;
 
 	/**
 	 * Constructor
@@ -85,7 +93,7 @@ class main_listener implements EventSubscriberInterface
 	 * @param string $php_ext
 	 * @internal param viewonline_helper $viewonline_helper
 	 */
-	public function __construct(helper $helper, template $template, driver_interface $db, manager $notification_manager, user $user, auth $auth, config $config, $php_ext)
+	public function __construct(helper $helper, template $template, driver_interface $db, manager $notification_manager, user $user, auth $auth, config $config, $php_ext, \phpbb\request\request_interface $request, \phpbb\log\log_interface $log, $table_prefix)
 	{
 		$this->helper = $helper;
 		$this->template = $template;
@@ -95,12 +103,17 @@ class main_listener implements EventSubscriberInterface
 		$this->auth = $auth;
 		$this->config = $config;
 		$this->php_ext = $php_ext;
+		$this->request = $request;
+		$this->log = $log;
+		$this->consent_table = $table_prefix . 'mention_consent';
 	}
 
 	static public function getSubscribedEvents()
 	{
 		return [
+			'core.delete_posts_before' => 'delete_post_notifications',
 			'core.submit_post_end'                  	=> 'submit_post',
+			'core.posting_modify_submission_errors' => 'validate_submission',
 			'core.modify_submit_post_data'          	=> 'modify_submit_post',
 			'core.approve_posts_after'              	=> 'handle_post_approval',
 			'core.permissions'                      	=> 'add_permission',
@@ -116,7 +129,14 @@ class main_listener implements EventSubscriberInterface
 		];
 	}
 
-	public function configure_bbcode($event)
+	public function delete_post_notifications($event)
+    {
+        $types = $event['delete_notifications_types'];
+        $types[] = 'paul999.mention.notification.type.mention';
+        $event['delete_notifications_types'] = array_values(array_unique($types));
+    }
+
+    public function configure_bbcode($event)
 	{
 		$configurator = $event['configurator'];
 		$html = ($this->config['simple_mention_link'])
@@ -148,7 +168,7 @@ class main_listener implements EventSubscriberInterface
 		$lang_set_ext = $event['lang_set_ext'];
 		$lang_set_ext[] = array(
 			'ext_name' => 'paul999/mention',
-			'lang_set' => 'common',
+			'lang_set' => ['common', 'hardening'],
 		);
 		$event['lang_set_ext'] = $lang_set_ext;
 	}
@@ -164,10 +184,12 @@ class main_listener implements EventSubscriberInterface
 			// Quick reply enabled forum
 			$s_quick_reply = (($event['topic_data']['forum_status'] == ITEM_UNLOCKED && $event['topic_data']['topic_status'] == ITEM_UNLOCKED) || $this->auth->acl_get('m_edit', $event['forum_id'])) ? true : false;
 		}
-		if ($s_quick_reply)
+		if ($s_quick_reply && $this->auth->acl_get('u_can_mention'))
 		{
 			$this->template->assign_vars([
-				'UA_AJAX_MENTION_URL'    => $this->helper->route('paul999_mention_controller'),
+				'U_AJAX_MENTION_URL'    => $this->helper->route('paul999_mention_controller', ['t'=>(int) ($event['topic_id'] ?? $event['topic_data']['topic_id'] ?? 0), 'f'=>(int) ($event['forum_id'] ?? 0)], false),
+				'MIN_MENTION_LENGTH' => max(2, (int) $this->config['simple_mention_minlength']),
+				'MENTION_LARGE_THRESHOLD' => policy::large_threshold($this->config['simple_mention_large_groups']),
 			]);
 		}
 	}
@@ -202,7 +224,8 @@ class main_listener implements EventSubscriberInterface
 	public function page_header()
 	{
 		$this->template->assign_vars([
-			'MENTION_COLOR' => $this->config['simple_mention_color'],
+			'MENTION_BACKGROUND' => preg_match('/^([a-f0-9]{3}){1,2}$/i', $this->config['simple_mention_background'] ?? '') ? $this->config['simple_mention_background'] : '',
+            'MENTION_TEXT' => preg_match('/^([a-f0-9]{3}){1,2}$/i', $this->config['simple_mention_text'] ?? '') ? $this->config['simple_mention_text'] : 'ffffff',
 			'MENTION_STYLE' => $this->config['simple_mention_style'],
 		]);
 	}
@@ -247,31 +270,29 @@ class main_listener implements EventSubscriberInterface
 			$forum_id = array_unique($forum_id);
 		}
 
-		// Mark all post/quote notifications read for this user in this forum
-		// Pretty bad, as this query is already done in mark_read, but
-		// because we have no access to that data in the event we need to run it
-		// again :(
-		$topic_ids = array();
-		$sql = 'SELECT topic_id
-			FROM ' . TOPICS_TABLE . '
-			WHERE ' . $this->db->sql_in_set('forum_id', $forum_id);
-		$result = $this->db->sql_query($sql);
-		while ($row = $this->db->sql_fetchrow($result))
-		{
-			$topic_ids[] = $row['topic_id'];
-		}
-		$this->db->sql_freeresult($result);
-
-		$this->mark_topic_read($topic_ids, $post_time);
+        if (!$forum_id) { return; }
+        // Keyset batches preserve manager/backend semantics and bound PHP memory.
+        $last = 0;
+        do
+        {
+            $ids = [];
+            $sql = 'SELECT topic_id FROM ' . TOPICS_TABLE . ' WHERE ' .
+                $this->db->sql_in_set('forum_id', $forum_id) . ' AND topic_id > ' . $last . ' ORDER BY topic_id';
+            $result = $this->db->sql_query_limit($sql, policy::READ_BATCH);
+            while ($row = $this->db->sql_fetchrow($result)) { $ids[] = (int) $row['topic_id']; }
+            $this->db->sql_freeresult($result);
+            if ($ids) { $this->mark_topic_read($ids, $post_time); $last = end($ids); }
+        } while (count($ids) === policy::READ_BATCH);
 	}
 
-	public function posting()
+	public function posting($event)
 	{
 		if ($this->auth->acl_get('u_can_mention'))
 		{
 			$this->template->assign_vars([
-			   'U_AJAX_MENTION_URL'		=> $this->helper->route('paul999_mention_controller'),
-			   'MIN_MENTION_LENGTH'		=> $this->config['simple_mention_minlength'],
+			   'U_AJAX_MENTION_URL'		=> $this->helper->route('paul999_mention_controller', ['t'=>(int) ($event['topic_id'] ?? $event['topic_data']['topic_id'] ?? 0), 'f'=>(int) ($event['forum_id'] ?? 0)], false),
+				'MIN_MENTION_LENGTH' => max(2, (int) $this->config['simple_mention_minlength']),
+				'MENTION_LARGE_THRESHOLD' => policy::large_threshold($this->config['simple_mention_large_groups']),
 			]);
 		}
 	}
@@ -320,9 +341,39 @@ class main_listener implements EventSubscriberInterface
 	/**
 	 * @param array $event
 	 */
+    public function validate_submission($event)
+    {
+        if (!$event['submit'] || !in_array($event['mode'], ['post', 'reply', 'quote']) || !$this->auth->acl_get('u_can_mention')) { return; }
+        global $message_parser;
+        $message = $message_parser->message;
+        $this->parse_message($message, $event['forum_id']);
+        $errors = $event['error'];
+        if ($this->mention_error) { $errors[] = $this->user->lang($this->mention_error, policy::MAX_RECIPIENTS); }
+        elseif ($this->needs_confirmation && !$this->confirmed($message, $event['forum_id']))
+        {
+            $errors[] = $this->user->lang('MENTION_CONFIRM_REQUIRED', count($this->mention_data));
+            $this->template->assign_vars([
+                'MENTION_CONFIRM_TOKEN' => policy::confirmation($message, $event['forum_id'], count($this->mention_data), $this->user->session_id),
+                'MENTION_CONFIRM_COUNT' => count($this->mention_data),
+            ]);
+        }
+        $event['error'] = $errors;
+    }
+
+    private function confirmed($message, $forum_id)
+    {
+        return $this->request->variable('mention_confirm', 0) === 1 && hash_equals(
+            policy::confirmation($message, $forum_id, count($this->mention_data), $this->user->session_id),
+            $this->request->variable('mention_confirm_token', '')
+        );
+    }
+
 	public function modify_submit_post($event)
 	{
-		$handle = ['post', 'reply', 'quote'];
+		$this->mention_data = [];
+        $this->needs_confirmation = false;
+        $this->mention_error = null;
+        $handle = ['post', 'reply', 'quote'];
 
 		if (!in_array($event['mode'], $handle) || !$this->auth->acl_get('u_can_mention'))
 		{
@@ -330,6 +381,10 @@ class main_listener implements EventSubscriberInterface
 		}
 
 		$this->parse_message($event['data']['message'], $event['data']['forum_id']);
+        // Guard direct submit_post callers too, before any post is stored.
+        if ($this->mention_error) { trigger_error($this->user->lang($this->mention_error, policy::MAX_RECIPIENTS)); }
+        if ($this->needs_confirmation && !$this->confirmed($event['data']['message'], $event['data']['forum_id']))
+        { trigger_error($this->user->lang('MENTION_CONFIRM_REQUIRED', count($this->mention_data))); }
 	}
 
 	public function handle_post_approval($event)
@@ -344,6 +399,8 @@ class main_listener implements EventSubscriberInterface
 		{
 			$posts[] = $post_id;
 		}
+
+		if (!$posts) { return; }
 
 		$sql = 'SELECT p.poster_id, p.post_text, p.post_id, t.topic_id, t.forum_id, t.topic_title 
 				  FROM ' . POSTS_TABLE . ' p, ' . TOPICS_TABLE . ' t
@@ -361,6 +418,8 @@ class main_listener implements EventSubscriberInterface
 		}
 		$this->db->sql_freeresult($result);
 
+		if (!$users) { return; }
+
 		$sql = 'SELECT username, user_id, user_permissions, user_type 
 				  FROM ' . USERS_TABLE . ' 
 				  WHERE ' . $this->db->sql_in_set('user_id', $users);
@@ -376,6 +435,7 @@ class main_listener implements EventSubscriberInterface
 		{
 			$this->mention_data = [];
 
+			if (!isset($userdata[$row['poster_id']]) || !in_array((int) $userdata[$row['poster_id']]['user_type'], [USER_NORMAL, USER_FOUNDER], true)) { continue; }
 			$local_auth = new auth();
 			$local_auth->acl($userdata[$row['poster_id']]);
 
@@ -383,7 +443,15 @@ class main_listener implements EventSubscriberInterface
 			{
 				continue;
 			}
-			$this->parse_message($row['post_text'], $row['forum_id'], false, $local_auth);
+			$this->parse_message($row['post_text'], $row['forum_id'], false, $local_auth, (int) $row['poster_id']);
+            if ($this->mention_error) { continue; }
+            if ($this->needs_confirmation)
+            {
+                $result = $this->db->sql_query('SELECT message_hash, recipient_count FROM ' . $this->consent_table . ' WHERE post_id = ' . (int) $row['post_id']);
+                $consent = $this->db->sql_fetchrow($result);
+                $this->db->sql_freeresult($result);
+                if (!$consent || !hash_equals($consent['message_hash'], $this->message_hash) || count($this->mention_data) > (int) $consent['recipient_count']) { continue; }
+            }
 
 			if (count($this->mention_data))
 			{
@@ -403,6 +471,14 @@ class main_listener implements EventSubscriberInterface
 
 	public function submit_post($event)
 	{
+        if (isset($this->mention_data) && $this->needs_confirmation && !$this->mention_error)
+        {
+            $post_id = (int) $event['data']['post_id'];
+            $this->db->sql_query('DELETE FROM ' . $this->consent_table . ' WHERE post_id = ' . $post_id);
+            $this->db->sql_query('INSERT INTO ' . $this->consent_table . ' ' . $this->db->sql_build_array('INSERT', [
+                'post_id' => $post_id, 'message_hash' => $this->message_hash, 'recipient_count' => count($this->mention_data),
+            ]));
+        }
 		if ($event['post_visibility'] == ITEM_APPROVED && isset($this->mention_data))
 		{
 			$data = $event['data'];
@@ -417,13 +493,19 @@ class main_listener implements EventSubscriberInterface
 	 * @param int $forum_id
 	 * @param bool $current
 	 */
-	private function parse_message($message, $forum_id, $current = true, ?auth $local_auth = null)
+	private function parse_message($message, $forum_id, $current = true, ?auth $local_auth = null, $author_id = null)
 	{
 		if ($local_auth === null)
 		{
 			$local_auth = $this->auth;
 		}
-		$matches = [];
+		$this->author_id = $author_id === null ? (int) $this->user->data['user_id'] : (int) $author_id;
+        $this->message_hash = hash('sha256', $message);
+        $this->mention_error = null;
+        $this->needs_confirmation = false;
+        if (substr_count($message, '[smention ') + substr_count($message, '[mention]') > policy::MAX_TAGS)
+        { $this->mention_data = []; $this->mention_error = 'MENTION_LIMIT_EXCEEDED'; return; }
+        $matches = [];
 		$mentions = [];
 		$this->mention_data = [];
 
@@ -475,42 +557,56 @@ class main_listener implements EventSubscriberInterface
 				$data[] = $matches[1][$i][0];
 			}
 
-			if (!$local_auth->acl_get('u_can_mention_large_groups'))
-			{
-				// User can only mention small groups. We need to check if the specified group is small.
-				$sql = 'SELECT COUNT(user_id) as cnt, group_id  
-				FROM ' . USER_GROUP_TABLE . ' g
-				WHERE ' . $this->db->sql_in_set('g.group_id', $data) . ' GROUP BY group_id';
-
-				$result = $this->db->sql_query($sql);
-				$data = [];
-				while ($row = $this->db->sql_fetchrow($result))
-				{
-					if ($row['cnt'] <= $this->config['simple_mention_large_groups'])
-					{
-						$data[] = $row['group_id'];
-					}
-				}
-				$this->db->sql_freeresult($result);
-			}
-
+            $sql = 'SELECT COUNT(DISTINCT u.user_id) as cnt, ug.group_id
+                FROM ' . USER_GROUP_TABLE . ' ug, ' . USERS_TABLE . ' u, ' . GROUPS_TABLE . ' g
+                WHERE ug.user_pending = 0 AND ug.user_pending = 0
+						AND u.user_id = ug.user_id AND g.group_id = ug.group_id
+                AND g.group_type <> ' . GROUP_HIDDEN . '
+                AND ' . $this->db->sql_in_set('g.group_name', ['GUESTS', 'BOTS'], true) . '
+                AND u.user_id <> ' . ANONYMOUS . '
+                AND ' . $this->db->sql_in_set('u.user_type', [USER_NORMAL, USER_FOUNDER]) . '
+                AND ' . $this->db->sql_in_set('ug.group_id', array_unique($data)) . ' GROUP BY ug.group_id';
+            $result = $this->db->sql_query($sql);
+            $data = [];
+            while ($row = $this->db->sql_fetchrow($result))
+            {
+                if ($row['cnt'] > policy::MAX_RECIPIENTS) { $this->mention_error = 'MENTION_LIMIT_EXCEEDED'; continue; }
+                if ($row['cnt'] > policy::large_threshold($this->config['simple_mention_large_groups']))
+                {
+                    if (!$local_auth->acl_get('u_can_mention_large_groups')) { continue; }
+                    $this->needs_confirmation = true;
+                }
+                $data[] = (int) $row['group_id'];
+            }
+            $this->db->sql_freeresult($result);
 			if (count($data) > 0)
 			{
-				$sql = 'SELECT u.user_id, u.username, u.user_permissions, u.user_type
+				$sql = 'SELECT DISTINCT u.user_id, u.username, u.user_permissions, u.user_type
 				FROM ' . USERS_TABLE . ' u, ' . USER_GROUP_TABLE . ' ug, ' . GROUPS_TABLE . ' g 
 				WHERE 
 						g.group_id = ug.group_id
 						AND g.group_type <> ' . GROUP_HIDDEN . '
 						AND ' . $this->db->sql_in_set('g.group_name', ['GUESTS', 'BOTS'], true) . '
+						AND ug.user_pending = 0
 						AND u.user_id = ug.user_id 
+						AND u.user_id <> ' . ANONYMOUS . '
+						AND ' . $this->db->sql_in_set('u.user_type', [USER_NORMAL, USER_FOUNDER]) . '
 						AND ' . $this->db->sql_in_set('ug.group_id', $data);
-				$result = $this->db->sql_query($sql);
+				$result = $this->db->sql_query_limit($sql, policy::MAX_RECIPIENTS + 1);
 				$data = $this->getUserData($result, $mentions);
 
 				$this->db->sql_freeresult($result);
 				$this->handle_matches($data, $forum_id, $current);
 			}
 		}
+        if (count($mentions) > policy::MAX_RECIPIENTS) { $this->mention_error = 'MENTION_LIMIT_EXCEEDED'; }
+        if (count($this->mention_data) > policy::large_threshold($this->config['simple_mention_large_groups']))
+        {
+            if (!$local_auth->acl_get('u_can_mention_large_groups')) { $this->mention_error = 'MENTION_MASS_DENIED'; }
+            $this->needs_confirmation = true;
+        }
+        if ($this->mention_error) { $this->mention_data = []; }
+
 	}
 
 	/**
@@ -524,9 +620,10 @@ class main_listener implements EventSubscriberInterface
 
 		while ($row = $this->db->sql_fetchrow($result))
 		{
-			if (!in_array($row['user_id'], $mentions))
+			if ($row['user_id'] != ANONYMOUS && in_array((int) $row['user_type'], [USER_NORMAL, USER_FOUNDER], true) && !isset($mentions[(int) $row['user_id']]))
 			{
-				$mentions[] = (int) $row['user_id'];
+				$mentions[(int) $row['user_id']] = true;
+                if (count($mentions) > policy::MAX_RECIPIENTS) { break; }
 				$data[] = $row;
 			}
 		}
@@ -540,7 +637,7 @@ class main_listener implements EventSubscriberInterface
 		{
 			foreach ($data as $row)
 			{
-				if ($current && $this->user->data['user_id'] == $row['user_id'])
+				if ($this->author_id == $row['user_id'])
 				{
 					continue; // Do not send notification to current user.
 				}
@@ -566,6 +663,13 @@ class main_listener implements EventSubscriberInterface
 	 */
 	private function send_notification($data)
 	{
+        if (!$this->mention_data || $this->mention_error) { return; }
+        if ($this->needs_confirmation)
+        {
+            // No recipient names, emails, group names or message text in audit data.
+            $this->log->add('admin', (int) $data['user_id'], '', 'LOG_MENTION_MASS', false,
+                [(int) $data['post_id'], count($this->mention_data)]);
+        }
 		$this->notification_manager->add_notifications('paul999.mention.notification.type.mention', [
 			'user_ids' => $this->mention_data,
 			'notification_id' => $data['post_id'],

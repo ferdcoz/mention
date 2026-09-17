@@ -49,14 +49,16 @@ class main_module
 				trigger_error('FORM_INVALID');
 			}
 
-			$minlength = $request->variable('simple_mention_minlength', 1);
-			$maxresults = $request->variable('simple_mention_maxresults', 50);
-			$large_groups = $request->variable('simple_mention_large_groups', 50);
-			$color = strtolower($request->variable('simple_mention_color', 'ff0000'));
+			$minlength = min(255, max(2, $request->variable('simple_mention_minlength', 2)));
+			$maxresults = min(50, max(1, $request->variable('simple_mention_maxresults', 25)));
+			$large_groups = \paul999\mention\hardening\policy::large_threshold($request->variable('simple_mention_large_groups', 50));
+			$color = strtolower(ltrim($request->variable('simple_mention_text', 'ffffff'), '#'));
+            $background = strtolower(ltrim($request->variable('simple_mention_background', ''), '#'));
+            $email_enabled = $request->variable('simple_mention_email_enabled', false);
 			$link = $request->variable('simple_mention_link', 0);
 			$style = $request->variable('simple_mention_style', 'italic');
 
-			if (!preg_match('/^([a-f0-9]{3}){1,2}$/', $color))
+			if (!preg_match('/^([a-f0-9]{3}){1,2}$/', $color) || ($background !== '' && !preg_match('/^([a-f0-9]{3}){1,2}$/', $background)))
 			{
 				$errors[] = $user->lang('MENTION_COLOR_INVALID', $color);
 			}
@@ -72,7 +74,9 @@ class main_module
 
 				$config->set('simple_mention_minlength', $minlength);
 				$config->set('simple_mention_maxresults', $maxresults);
-				$config->set('simple_mention_color', $color);
+				$config->set('simple_mention_text', $color);
+                $config->set('simple_mention_background', $background);
+                $config->set('simple_mention_email_enabled', (int) $email_enabled);
 				$config->set('simple_mention_large_groups', $large_groups);
 				$config->set('simple_mention_link', $link);
 				$config->set('simple_mention_style', $style);
@@ -92,7 +96,9 @@ class main_module
 		$template->assign_vars([
 			'SIMPLE_MENTION_MINLENGTH'		=> $config['simple_mention_minlength'],
 			'SIMPLE_MENTION_MAXRESULTS'		=> $config['simple_mention_maxresults'],
-			'SIMPLE_MENTION_COLOR'			=> $config['simple_mention_color'],
+			'SIMPLE_MENTION_TEXT' => $config['simple_mention_text'] ?? 'ffffff',
+            'SIMPLE_MENTION_BACKGROUND' => $config['simple_mention_background'] ?? '',
+            'SIMPLE_MENTION_EMAIL_ENABLED' => (bool) ($config['simple_mention_email_enabled'] ?? 1),
 			'SIMPLE_MENTION_LARGE_GROUPS'	=> $config['simple_mention_large_groups'],
 			'SIMPLE_MENTION_LINK'			=> (bool) $config['simple_mention_link'],
 			'SIMPLE_MENTION_STYLE'			=> $config['simple_mention_style'],

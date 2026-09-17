@@ -1,4 +1,10 @@
 services:
+    paul999.mention.rate_limiter:
+        class: paul999\mention\hardening\rate_limiter
+        arguments:
+            - '@dbal.conn'
+            - '%core.table_prefix%'
+
     paul999.mention.controller:
         class: paul999\mention\controller\main
         arguments:
@@ -7,6 +13,7 @@ services:
             - '@auth'
             - '@request'
             - '@config'
+            - '@paul999.mention.rate_limiter'
 
     paul999.mention.listener:
         class: paul999\mention\event\main_listener
@@ -19,6 +26,9 @@ services:
             - '@auth'
             - '@config'
             - '%core.php_ext%'
+            - '@request'
+            - '@log'
+            - '%core.table_prefix%'
         tags:
             - { name: event.listener }
 

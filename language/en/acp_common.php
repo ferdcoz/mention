@@ -39,3 +39,22 @@ $lang = array_merge($lang, array(
 	'MENTION_LINK'					=> 'Profile link',
 	'MENTION_LINK_EXPLAIN'			=> 'When enabled, mentioned users are linked to their profile. When disabled, mentions are displayed as plain text.'
 ));
+
+$lang['MENTION_LARGE_GROUPS_EXPLAIN'] = 'Mass mention threshold (1–50), also applied to combined recipients per post. Absolute limits: 500 unique candidates and 500 tags.';
+
+$lang = array_merge($lang, [
+    'MENTION_BACKGROUND' => 'Tag background colour',
+    'MENTION_BACKGROUND_EXPLAIN' => 'Hexadecimal with or without #. Leave empty to use the active theme colour.',
+    'MENTION_TEXT' => 'Tag text colour',
+    'MENTION_EMAIL' => 'Mention notification channels',
+    'MENTION_EMAIL_EXPLAIN' => 'Board only blocks mention emails. Allow email respects each user’s choice in User Control Panel → Board preferences → Edit notification options → Mentions. It does not automatically enable email or change existing preferences.',
+    'MENTION_BOARD_ONLY' => 'Board notifications only',
+    'MENTION_ALLOW_EMAIL' => 'Allow email according to user preference',
+]);
+
+$lang = array_merge($lang, [
+    'MENTION_PREVIEW' => 'Preview',
+    'MENTION_PREVIEW_EXPLAIN' => 'Updates as you edit, before saving. With an empty background the final colour depends on the forum theme; a reference colour is shown here.',
+    'MENTION_PREVIEW_SAMPLE' => 'this is how the mention will appear in a message.',
+    'MENTION_PREVIEW_INVALID' => 'Enter valid hexadecimal colours to update the preview.',
+]);

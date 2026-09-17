@@ -5,6 +5,8 @@
    {% INCLUDEJS '@paul999_mention/js/utils/tribute.min.js' %}
 	 <script>
         var U_AJAX_MENTION_URL = '{{ U_AJAX_MENTION_URL|e('js') }}';
+        var MENTION_LARGE_THRESHOLD = {{ MENTION_LARGE_THRESHOLD|default(50) }};
+        var MENTION_CONFIRM_GROUP = '{{ lang('MENTION_CONFIRM_GROUP')|e('js') }}';
         var MIN_MENTION_LENGTH = '{{ MIN_MENTION_LENGTH|e('js') }}';
         var SIMPLE_MENTION_GROUP_NAME = '{{ lang('MENTION_GROUP_NAME')|e('js') }}';
 

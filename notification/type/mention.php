@@ -117,7 +117,16 @@ class mention extends base
 		{
 			$users[$user] = $user;
 		}
-		return $this->check_user_notification_options($users);
+		$recipients = $this->check_user_notification_options($users, $options);
+        if (empty($this->config['simple_mention_email_enabled']))
+        {
+            foreach ($recipients as $id => $methods)
+            {
+                $recipients[$id] = array_values(array_diff($methods, ['notification.method.email']));
+                if (!$recipients[$id]) { unset($recipients[$id]); }
+            }
+        }
+        return $recipients;
 	}
 
 	/**
@@ -157,6 +166,7 @@ class mention extends base
 	 */
 	public function get_email_template()
 	{
+        if (empty($this->config['simple_mention_email_enabled'])) { return false; }
 		if ($this->user_id)
 		{
 			$user = $this->user_loader->get_user($this->user_id);

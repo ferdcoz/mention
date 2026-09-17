@@ -1,12 +1,16 @@
 {
     "name": "paul999/mention",
     "type": "phpbb-extension",
-    "description": "Mention a user by using @USERNAME",
-    "homepage": "https://www.phpbbextensions.io",
-    "version": "3.0.1",
-    "time": "2023-03-04",
+    "description": "User and group mentions with notifications, topic-aware autocomplete and configurable tags for phpBB",
+    "homepage": "https://github.com/ferdcoz/mention",
+    "version": "3.1.0",
     "license": "GPL-2.0-only",
     "authors": [
+        {
+            "name": "Fernando Coz",
+            "homepage": "https://github.com/ferdcoz",
+            "role": "Fork maintainer"
+        },
         {
             "name": "paul999",
             "email": "paul@phpbb.com",
@@ -19,17 +23,14 @@
         }
     ],
     "require": {
-        "php": "~7.1 || ~8.0",
-        "phpbb/phpbb": ">=3.3.0RC1,<3.4.0@dev",
-        "composer/installers": "~1.0.0"
+        "php": ">=8.1,<9.0",
+        "phpbb/phpbb": ">=3.3.17,<3.4.0",
+        "composer/installers": "^1.0 || ^2.0"
     },
     "extra": {
         "display-name": "Simple mentions",
         "soft-require": {
-            "phpbb/phpbb": ">=3.3.0RC1,<3.4.0@dev"
+            "phpbb/phpbb": ">=3.3.17,<3.4.0"
         }
-    },
-    "require-dev": {
-        "phing/phing": "2.4.*"
     }
 }
